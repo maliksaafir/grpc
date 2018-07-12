@@ -32,6 +32,11 @@
 #include "src/core/tsi/ssl_transport_security.h"
 #include "src/core/tsi/transport_security_interface.h"
 
+#if defined __APPLE__
+#include <CoreFoundation/CoreFoundation.h>
+#include <Security/Security.h>
+#endif // __APPLE__
+
 extern grpc_core::DebugOnlyTraceFlag grpc_trace_security_connector_refcount;
 
 /* --- status enum. --- */

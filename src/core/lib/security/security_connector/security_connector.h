@@ -33,11 +33,11 @@
 #include "src/core/tsi/transport_security_interface.h"
 
 #if defined __APPLE__
-#include <errno.h>
-#include <sys/sysctl.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
-#endif // __APPLE__
+#include <errno.h>
+#include <sys/sysctl.h>
+#endif  // __APPLE__
 
 extern grpc_core::DebugOnlyTraceFlag grpc_trace_security_connector_refcount;
 
@@ -310,25 +310,31 @@ class DefaultSslRootStore {
   // which still works on OS X 10.8 (Mountain Lion).
   // It lacks support for admin & user cert domains.
   // See golang.org/issue/16473
-  static int FetchPEMRoots_MountainLion(CFDataRef *pemRoots);
+  static int FetchPEMRoots_MountainLion(CFDataRef* pemRoots);
 
   // useOldCode reports whether the running machine is OS X 10.8 Mountain Lion
-  // or older. We only support Mountain Lion and higher, but we'll at least try our
-  // best on older machines and continue to use the old code path.
+  // or older. We only support Mountain Lion and higher, but we'll at least try
+  // our best on older machines and continue to use the old code path.
   //
   // See golang.org/issue/16473
   static int useOldCode();
 
   // FetchPEMRoots fetches the system's list of trusted X.509 root certificates.
   //
-  // On success it returns 0 and fills pemRoots with a CFDataRef that contains the extracted root
-  // certificates of the system. On failure, the function returns -1.
-  // Additionally, it fills untrustedPemRoots with certs that must be removed from pemRoots.
+  // On success it returns 0 and fills pemRoots with a CFDataRef that contains
+  // the extracted root certificates of the system. On failure, the function
+  // returns -1. Additionally, it fills untrustedPemRoots with certs that must
+  // be removed from pemRoots.
   //
   // Note: The CFDataRef returned in pemRoots and untrustedPemRoots must
   // be released (using CFRelease) after we've consumed its content.
-  static int FetchPEMRoots(CFDataRef *pemRoots, CFDataRef *untrustedPemRoots);
-#endif
+  static int FetchPEMRoots(CFDataRef* pemRoots, CFDataRef* untrustedPemRoots);
+
+  // GetMacOSRootCerts uses the functions from the cgo code sample to access
+  // MacOS system root certs and compile them into the grpc_slice passed in.
+  // Returns -1 on failure, 0 on success. Protected for testing.
+  static int GetMacOSRootCerts(grpc_slice* roots);
+#endif  // __APPLE__
 
   // Set and get the platform variable.
   // Required for GetSystemRootCerts() tests.

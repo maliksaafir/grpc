@@ -399,6 +399,17 @@ class TestDefaultSslRootStore : public DefaultSslRootStore {
                                                  const char* filename) {
     return GetAbsoluteCertFilePath(directory, filename);
   }
+
+#if defined __APPLE__
+  static void SetMacOSRootCertsGetterForTesting(
+      grpc_macos_system_ssl_roots_getter func) {
+    SetMacOSRootCertsGetter(func);
+  }
+
+  static int GetMacOSRootCertsForTesting(grpc_slice* roots) {
+    return GetMacOSRootCerts(roots);
+  }
+#endif  //__APPLE__
 };
 
 }  // namespace
@@ -529,6 +540,49 @@ static void test_cert_bundle_creation() {
   unsetenv("GRPC_SYSTEM_SSL_ROOTS_DIR");
 }
 
+#if defined __APPLE__
+int grpc_macos_system_ssl_roots_fail(CFDataRef* data, CFDataRef* untrusted) {
+  return -1;
+}
+
+int grpc_macos_system_ssl_roots_dummy(CFDataRef* data, CFDataRef* untrusted) {
+  const char* buf = "DUMMY DATA";
+  CFDataRef dummy_data = CFDataCreate(kCFAllocatorDefault, (const UInt8*)buf,
+                                      (CFIndex)strlen(buf));
+  *data = dummy_data;
+  CFRelease(CFTypeRef(dummy_data));
+  return 0;
+}
+
+static void test_macos_system_roots() {
+  /* Test that GetMacOSRootCerts returns -1 when the getter function fails. */
+  grpc_core::TestDefaultSslRootStore::SetMacOSRootCertsGetterForTesting(
+      grpc_macos_system_ssl_roots_fail);
+  grpc_slice test_slice = grpc_empty_slice();
+  int err = grpc_core::TestDefaultSslRootStore::GetMacOSRootCertsForTesting(
+      &test_slice);
+  GPR_ASSERT(err == -1);
+
+  /* Test that GetMacOSRootCerts successfully converts from CFDataRef to
+   * grpc_slice and returns 0 on success. */
+  grpc_core::TestDefaultSslRootStore::SetMacOSRootCertsGetterForTesting(
+      grpc_macos_system_ssl_roots_dummy);
+  test_slice = grpc_empty_slice();
+  err = grpc_core::TestDefaultSslRootStore::GetMacOSRootCertsForTesting(
+      &test_slice);
+  const char* test_slice_str = grpc_slice_to_c_string(test_slice);
+  GPR_ASSERT(err == 0);
+  GPR_ASSERT(strcmp(test_slice_str, "DUMMY DATA") == 0);
+  /* TODO: add tests for untrusted roots data when GetMacOSRootCerts can handle
+   * them. */
+
+  /* Reset getter function so it defaults to FetchPEMRoots during normal
+   * execution. */
+  grpc_core::TestDefaultSslRootStore::SetMacOSRootCertsGetterForTesting(
+      nullptr);
+}
+#endif  //__APPLE__
+
 int main(int argc, char** argv) {
   grpc_test_init(argc, argv);
   grpc_init();
@@ -544,6 +598,9 @@ int main(int argc, char** argv) {
   test_platform_detection();
   test_absolute_cert_path();
   test_cert_bundle_creation();
+#if defined __APPLE__
+  test_macos_system_roots();
+#endif  //__APPLE__
 
   grpc_shutdown();
   return 0;

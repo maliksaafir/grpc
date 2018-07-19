@@ -1184,6 +1184,10 @@ const char* DefaultSslRootStore::linux_cert_directories_[] = {
     "/etc/ssl/certs", "/system/etc/security/cacerts", "/usr/local/share/certs",
     "/etc/pki/tls/certs", "/etc/openssl/certs"};
 grpc_platform DefaultSslRootStore::platform_;
+#if defined __APPLE__
+grpc_macos_system_ssl_roots_getter DefaultSslRootStore::get_macos_pem_roots =
+    nullptr;
+#endif  // __APPLE__
 
 const tsi_ssl_root_certs_store* DefaultSslRootStore::GetRootStore() {
   InitRootStore();
@@ -1253,18 +1257,17 @@ grpc_slice DefaultSslRootStore::ComputePemRootCerts() {
 
 const char* DefaultSslRootStore::GetSystemRootCertsFile() {
   switch (platform_) {
-    case PLATFORM_LINUX:
-      {
-        FILE* cert_file;
-        size_t num_cert_files_ = sizeof(DefaultSslRootStore::linux_cert_files_);
-        for (size_t i = 0; i < num_cert_files_; i++) {
-          cert_file = fopen(linux_cert_files_[i], "r");
-          if (cert_file != nullptr) {
-            fclose(cert_file);
-            return linux_cert_files_[i];
-          }
+    case PLATFORM_LINUX: {
+      FILE* cert_file;
+      size_t num_cert_files_ = sizeof(DefaultSslRootStore::linux_cert_files_);
+      for (size_t i = 0; i < num_cert_files_; i++) {
+        cert_file = fopen(linux_cert_files_[i], "r");
+        if (cert_file != nullptr) {
+          fclose(cert_file);
+          return linux_cert_files_[i];
         }
       }
+    }
       return nullptr;
     case PLATFORM_WINDOWS:
       // TODO: implement Windows-specific method (certutil?).
@@ -1272,7 +1275,8 @@ const char* DefaultSslRootStore::GetSystemRootCertsFile() {
     case PLATFORM_APPLE:
       // TODO: implement Apple-specific method (keychain API?).
       break;
-    default: break;
+    default:
+      break;
   }
   return nullptr;
 }
@@ -1368,14 +1372,13 @@ grpc_slice DefaultSslRootStore::CreateRootCertsBundle() {
       size_t cert_file_size = ftell(cert_file);
       rewind(cert_file);
       fread(bundle_string + bytes_read, cert_file_size,
-                          /* nmemb */ 1, cert_file);
+            /* nmemb */ 1, cert_file);
       bytes_read += cert_file_size;
       fclose(cert_file);
     }
   }
   closedir(ca_directory);
-  bundle_slice =
-      grpc_slice_new(bundle_string, total_bundle_size, gpr_free);
+  bundle_slice = grpc_slice_new(bundle_string, total_bundle_size, gpr_free);
   gpr_free(bundle_string);
   return bundle_slice;
 }
@@ -1582,16 +1585,21 @@ int DefaultSslRootStore::FetchPEMRoots(CFDataRef* pemRoots,
 int DefaultSslRootStore::GetMacOSRootCerts(grpc_slice* roots) {
   CFDataRef data = 0;
   CFDataRef untrusted_data = 0;
-  int err = FetchPEMRoots(&data, &untrusted_data);
+  if (!get_macos_pem_roots) {
+    get_macos_pem_roots = FetchPEMRoots;
+  }
+  int err = get_macos_pem_roots(&data, &untrusted_data);
   if (err == -1) {
     return -1;
   }
   char* buf = nullptr;
   buf = (char*)(CFDataGetBytePtr(data));
   *roots = grpc_slice_from_copied_buffer(buf, CFDataGetLength(data));
-  // TODO: decide how to handle the removal of untrusted roots from the data
-  CFRelease(CFTypeRef(data));
-  CFRelease(CFTypeRef(untrusted_data));
+  // TODO: handle removal of untrusted roots from data.
+
+  // These two lines cause SIGILL (illegal operation crashes):
+  // CFRelease(data);
+  // CFRelease(untrusted_data);
   return 0;
 }
 #endif  //__APPLE__

@@ -260,6 +260,11 @@ tsi_peer grpc_shallow_peer_from_ssl_auth_context(
 void grpc_shallow_peer_destruct(tsi_peer* peer);
 int grpc_ssl_host_matches_name(const tsi_peer* peer, const char* peer_name);
 
+#if defined __APPLE__
+typedef int (*grpc_macos_system_ssl_roots_getter)(CFDataRef* data,
+                                                  CFDataRef* untrusted_data);
+#endif  // __APPLE__
+
 /* --- Default SSL Root Store. --- */
 namespace grpc_core {
 
@@ -334,6 +339,11 @@ class DefaultSslRootStore {
   // MacOS system root certs and compile them into the grpc_slice passed in.
   // Returns -1 on failure, 0 on success. Protected for testing.
   static int GetMacOSRootCerts(grpc_slice* roots);
+
+  static void SetMacOSRootCertsGetter(grpc_macos_system_ssl_roots_getter func) {
+    get_macos_pem_roots = func;
+  }
+  static grpc_macos_system_ssl_roots_getter get_macos_pem_roots;
 #endif  // __APPLE__
 
   // Set and get the platform variable.

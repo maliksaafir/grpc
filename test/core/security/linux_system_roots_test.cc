@@ -41,7 +41,7 @@
 
 #ifndef GRPC_USE_SYSTEM_SSL_ROOTS_ENV_VAR
 #define GRPC_USE_SYSTEM_SSL_ROOTS_ENV_VAR "GRPC_USE_SYSTEM_SSL_ROOTS"
-#endif
+#endif  // GRPC_USE_SYSTEM_SSL_ROOTS_ENV_VAR
 
 // Test GetAbsoluteFilePath.
 static void test_absolute_cert_path() {

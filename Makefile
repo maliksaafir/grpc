@@ -351,6 +351,7 @@ CFLAGS += -std=c99 -Wsign-conversion -Wconversion $(W_SHADOW) $(W_EXTRA_SEMI)
 CXXFLAGS += -std=c++11
 ifeq ($(SYSTEM),Darwin)
 CXXFLAGS += -stdlib=libc++
+LDFLAGS += -framework CoreFoundation -framework Security
 endif
 CPPFLAGS += -g -Wall -Wextra -Werror -Wno-long-long -Wno-unused-parameter -DOSATOMIC_USE_INLINED=1 -Wno-deprecated-declarations -Ithird_party/nanopb -DPB_FIELD_32BIT
 COREFLAGS += -fno-rtti -fno-exceptions
@@ -1170,6 +1171,8 @@ grpc_alts_credentials_options_test: $(BINDIR)/$(CONFIG)/grpc_alts_credentials_op
 grpc_cli: $(BINDIR)/$(CONFIG)/grpc_cli
 grpc_cpp_plugin: $(BINDIR)/$(CONFIG)/grpc_cpp_plugin
 grpc_csharp_plugin: $(BINDIR)/$(CONFIG)/grpc_csharp_plugin
+grpc_linux_system_roots_test: $(BINDIR)/$(CONFIG)/grpc_linux_system_roots_test
+grpc_macos_system_roots_test: $(BINDIR)/$(CONFIG)/grpc_macos_system_roots_test
 grpc_node_plugin: $(BINDIR)/$(CONFIG)/grpc_node_plugin
 grpc_objective_c_plugin: $(BINDIR)/$(CONFIG)/grpc_objective_c_plugin
 grpc_php_plugin: $(BINDIR)/$(CONFIG)/grpc_php_plugin
@@ -1670,6 +1673,8 @@ buildtests_cxx: privatelibs_cxx \
   $(BINDIR)/$(CONFIG)/golden_file_test \
   $(BINDIR)/$(CONFIG)/grpc_alts_credentials_options_test \
   $(BINDIR)/$(CONFIG)/grpc_cli \
+  $(BINDIR)/$(CONFIG)/grpc_linux_system_roots_test \
+  $(BINDIR)/$(CONFIG)/grpc_macos_system_roots_test \
   $(BINDIR)/$(CONFIG)/grpc_tool_test \
   $(BINDIR)/$(CONFIG)/grpclb_api_test \
   $(BINDIR)/$(CONFIG)/grpclb_end2end_test \
@@ -1849,6 +1854,8 @@ buildtests_cxx: privatelibs_cxx \
   $(BINDIR)/$(CONFIG)/golden_file_test \
   $(BINDIR)/$(CONFIG)/grpc_alts_credentials_options_test \
   $(BINDIR)/$(CONFIG)/grpc_cli \
+  $(BINDIR)/$(CONFIG)/grpc_linux_system_roots_test \
+  $(BINDIR)/$(CONFIG)/grpc_macos_system_roots_test \
   $(BINDIR)/$(CONFIG)/grpc_tool_test \
   $(BINDIR)/$(CONFIG)/grpclb_api_test \
   $(BINDIR)/$(CONFIG)/grpclb_end2end_test \
@@ -2316,6 +2323,10 @@ test_cxx: buildtests_cxx
 	$(Q) $(BINDIR)/$(CONFIG)/golden_file_test || ( echo test golden_file_test failed ; exit 1 )
 	$(E) "[RUN]     Testing grpc_alts_credentials_options_test"
 	$(Q) $(BINDIR)/$(CONFIG)/grpc_alts_credentials_options_test || ( echo test grpc_alts_credentials_options_test failed ; exit 1 )
+	$(E) "[RUN]     Testing grpc_linux_system_roots_test"
+	$(Q) $(BINDIR)/$(CONFIG)/grpc_linux_system_roots_test || ( echo test grpc_linux_system_roots_test failed ; exit 1 )
+	$(E) "[RUN]     Testing grpc_macos_system_roots_test"
+	$(Q) $(BINDIR)/$(CONFIG)/grpc_macos_system_roots_test || ( echo test grpc_macos_system_roots_test failed ; exit 1 )
 	$(E) "[RUN]     Testing grpc_tool_test"
 	$(Q) $(BINDIR)/$(CONFIG)/grpc_tool_test || ( echo test grpc_tool_test failed ; exit 1 )
 	$(E) "[RUN]     Testing grpclb_api_test"
@@ -3608,6 +3619,9 @@ LIBGRPC_SRC = \
     src/core/lib/security/credentials/plugin/plugin_credentials.cc \
     src/core/lib/security/credentials/ssl/ssl_credentials.cc \
     src/core/lib/security/security_connector/alts_security_connector.cc \
+    src/core/lib/security/security_connector/load_system_roots_fallback.cc \
+    src/core/lib/security/security_connector/load_system_roots_linux.cc \
+    src/core/lib/security/security_connector/load_system_roots_macos.cc \
     src/core/lib/security/security_connector/local_security_connector.cc \
     src/core/lib/security/security_connector/security_connector.cc \
     src/core/lib/security/transport/client_auth_filter.cc \
@@ -4037,6 +4051,9 @@ LIBGRPC_CRONET_SRC = \
     src/core/lib/security/credentials/plugin/plugin_credentials.cc \
     src/core/lib/security/credentials/ssl/ssl_credentials.cc \
     src/core/lib/security/security_connector/alts_security_connector.cc \
+    src/core/lib/security/security_connector/load_system_roots_fallback.cc \
+    src/core/lib/security/security_connector/load_system_roots_linux.cc \
+    src/core/lib/security/security_connector/load_system_roots_macos.cc \
     src/core/lib/security/security_connector/local_security_connector.cc \
     src/core/lib/security/security_connector/security_connector.cc \
     src/core/lib/security/transport/client_auth_filter.cc \
@@ -17907,6 +17924,92 @@ ifneq ($(NO_DEPS),true)
 endif
 
 
+GRPC_LINUX_SYSTEM_ROOTS_TEST_SRC = \
+    test/core/security/linux_system_roots_test.cc \
+
+GRPC_LINUX_SYSTEM_ROOTS_TEST_OBJS = $(addprefix $(OBJDIR)/$(CONFIG)/, $(addsuffix .o, $(basename $(GRPC_LINUX_SYSTEM_ROOTS_TEST_SRC))))
+ifeq ($(NO_SECURE),true)
+
+# You can't build secure targets if you don't have OpenSSL.
+
+$(BINDIR)/$(CONFIG)/grpc_linux_system_roots_test: openssl_dep_error
+
+else
+
+
+
+
+ifeq ($(NO_PROTOBUF),true)
+
+# You can't build the protoc plugins or protobuf-enabled targets if you don't have protobuf 3.5.0+.
+
+$(BINDIR)/$(CONFIG)/grpc_linux_system_roots_test: protobuf_dep_error
+
+else
+
+$(BINDIR)/$(CONFIG)/grpc_linux_system_roots_test: $(PROTOBUF_DEP) $(GRPC_LINUX_SYSTEM_ROOTS_TEST_OBJS) $(LIBDIR)/$(CONFIG)/libgrpc_test_util.a $(LIBDIR)/$(CONFIG)/libgrpc.a $(LIBDIR)/$(CONFIG)/libgpr_test_util.a $(LIBDIR)/$(CONFIG)/libgpr.a
+	$(E) "[LD]      Linking $@"
+	$(Q) mkdir -p `dirname $@`
+	$(Q) $(LDXX) $(LDFLAGS) $(GRPC_LINUX_SYSTEM_ROOTS_TEST_OBJS) $(LIBDIR)/$(CONFIG)/libgrpc_test_util.a $(LIBDIR)/$(CONFIG)/libgrpc.a $(LIBDIR)/$(CONFIG)/libgpr_test_util.a $(LIBDIR)/$(CONFIG)/libgpr.a $(LDLIBSXX) $(LDLIBS_PROTOBUF) $(LDLIBS) $(LDLIBS_SECURE) $(GTEST_LIB) -o $(BINDIR)/$(CONFIG)/grpc_linux_system_roots_test
+
+endif
+
+endif
+
+$(OBJDIR)/$(CONFIG)/test/core/security/linux_system_roots_test.o:  $(LIBDIR)/$(CONFIG)/libgrpc_test_util.a $(LIBDIR)/$(CONFIG)/libgrpc.a $(LIBDIR)/$(CONFIG)/libgpr_test_util.a $(LIBDIR)/$(CONFIG)/libgpr.a
+
+deps_grpc_linux_system_roots_test: $(GRPC_LINUX_SYSTEM_ROOTS_TEST_OBJS:.o=.dep)
+
+ifneq ($(NO_SECURE),true)
+ifneq ($(NO_DEPS),true)
+-include $(GRPC_LINUX_SYSTEM_ROOTS_TEST_OBJS:.o=.dep)
+endif
+endif
+
+
+GRPC_MACOS_SYSTEM_ROOTS_TEST_SRC = \
+    test/core/security/macos_system_roots_test.cc \
+
+GRPC_MACOS_SYSTEM_ROOTS_TEST_OBJS = $(addprefix $(OBJDIR)/$(CONFIG)/, $(addsuffix .o, $(basename $(GRPC_MACOS_SYSTEM_ROOTS_TEST_SRC))))
+ifeq ($(NO_SECURE),true)
+
+# You can't build secure targets if you don't have OpenSSL.
+
+$(BINDIR)/$(CONFIG)/grpc_macos_system_roots_test: openssl_dep_error
+
+else
+
+
+
+
+ifeq ($(NO_PROTOBUF),true)
+
+# You can't build the protoc plugins or protobuf-enabled targets if you don't have protobuf 3.5.0+.
+
+$(BINDIR)/$(CONFIG)/grpc_macos_system_roots_test: protobuf_dep_error
+
+else
+
+$(BINDIR)/$(CONFIG)/grpc_macos_system_roots_test: $(PROTOBUF_DEP) $(GRPC_MACOS_SYSTEM_ROOTS_TEST_OBJS) $(LIBDIR)/$(CONFIG)/libgrpc_test_util.a $(LIBDIR)/$(CONFIG)/libgrpc.a $(LIBDIR)/$(CONFIG)/libgpr_test_util.a $(LIBDIR)/$(CONFIG)/libgpr.a
+	$(E) "[LD]      Linking $@"
+	$(Q) mkdir -p `dirname $@`
+	$(Q) $(LDXX) $(LDFLAGS) $(GRPC_MACOS_SYSTEM_ROOTS_TEST_OBJS) $(LIBDIR)/$(CONFIG)/libgrpc_test_util.a $(LIBDIR)/$(CONFIG)/libgrpc.a $(LIBDIR)/$(CONFIG)/libgpr_test_util.a $(LIBDIR)/$(CONFIG)/libgpr.a $(LDLIBSXX) $(LDLIBS_PROTOBUF) $(LDLIBS) $(LDLIBS_SECURE) $(GTEST_LIB) -o $(BINDIR)/$(CONFIG)/grpc_macos_system_roots_test
+
+endif
+
+endif
+
+$(OBJDIR)/$(CONFIG)/test/core/security/macos_system_roots_test.o:  $(LIBDIR)/$(CONFIG)/libgrpc_test_util.a $(LIBDIR)/$(CONFIG)/libgrpc.a $(LIBDIR)/$(CONFIG)/libgpr_test_util.a $(LIBDIR)/$(CONFIG)/libgpr.a
+
+deps_grpc_macos_system_roots_test: $(GRPC_MACOS_SYSTEM_ROOTS_TEST_OBJS:.o=.dep)
+
+ifneq ($(NO_SECURE),true)
+ifneq ($(NO_DEPS),true)
+-include $(GRPC_MACOS_SYSTEM_ROOTS_TEST_OBJS:.o=.dep)
+endif
+endif
+
+
 GRPC_NODE_PLUGIN_SRC = \
     src/compiler/node_plugin.cc \
 
@@ -24651,6 +24754,9 @@ src/core/lib/security/credentials/oauth2/oauth2_credentials.cc: $(OPENSSL_DEP)
 src/core/lib/security/credentials/plugin/plugin_credentials.cc: $(OPENSSL_DEP)
 src/core/lib/security/credentials/ssl/ssl_credentials.cc: $(OPENSSL_DEP)
 src/core/lib/security/security_connector/alts_security_connector.cc: $(OPENSSL_DEP)
+src/core/lib/security/security_connector/load_system_roots_fallback.cc: $(OPENSSL_DEP)
+src/core/lib/security/security_connector/load_system_roots_linux.cc: $(OPENSSL_DEP)
+src/core/lib/security/security_connector/load_system_roots_macos.cc: $(OPENSSL_DEP)
 src/core/lib/security/security_connector/local_security_connector.cc: $(OPENSSL_DEP)
 src/core/lib/security/security_connector/security_connector.cc: $(OPENSSL_DEP)
 src/core/lib/security/transport/client_auth_filter.cc: $(OPENSSL_DEP)
